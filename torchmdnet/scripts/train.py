@@ -97,6 +97,13 @@ def get_args():
     # TensorNet specific
     parser.add_argument('--equivariance-invariance-group', type=str, default='O(3)', help='Equivariance and invariance group of TensorNet')
 
+    # TensorNet-Ext specific
+    parser.add_argument('--ext-num-rbf', type=int, default=64, help='Number of radial basis functions in model')
+    parser.add_argument('--ext-rbf-type', type=str, default='expnorm', choices=list(rbf_class_mapping.keys()), help='Type of distance expansion')
+    parser.add_argument('--ext-trainable-rbf', type=bool, default=False, help='If distance expansion functions should be trainable')
+    parser.add_argument('--ext-cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')
+    parser.add_argument('--ext-cutoff-upper', type=float, default=5.0, help='Upper cutoff in model')
+    
     # other args
     parser.add_argument('--derivative', default=False, type=bool, help='If true, take the derivative of the prediction w.r.t coordinates')
     parser.add_argument('--cutoff-lower', type=float, default=0.0, help='Lower cutoff in model')

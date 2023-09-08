@@ -117,6 +117,11 @@ class TensorNet_Ext(nn.Module):
         activation="silu",
         cutoff_lower=0,
         cutoff_upper=4.5,
+        ext_num_rbf=32,
+        ext_rbf_type="expnorm",
+        ext_trainable_rbf=False,
+        ext_cutoff_lower=0,
+        ext_cutoff_upper=10.0,
         max_z=128,
         max_num_neighbors=64,
         equivariance_invariance_group="O(3)",
@@ -178,13 +183,13 @@ class TensorNet_Ext(nn.Module):
                     ).jittable()
                 )
         self.ext_layer = Interaction_Ext(
-                        num_rbf,
-                        rbf_type, #'gauss',
-                        trainable_rbf,
+                        ext_num_rbf,
+                        ext_rbf_type,
+                        ext_trainable_rbf,
                         hidden_channels,
                         act_class,
-                        cutoff_lower,
-                        17.0,
+                        ext_cutoff_lower,
+                        ext_cutoff_upper,
                         dtype,
                     )
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)

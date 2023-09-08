@@ -86,7 +86,12 @@ def create_model(args, prior_model=None, mean=None, std=None):
 	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
         is_equivariant = False
         representation_model = TensorNet_Ext(
-	    equivariance_invariance_group=args["equivariance_invariance_group"],
+            ext_num_rbf=args["ext_num_rbf"],
+            ext_rbf_type=args["ext_rbf_type"],
+            ext_trainable_rbf=args["ext_trainable_rbf"],
+            ext_cutoff_lower=args["ext_cutoff_lower"],
+            ext_cutoff_upper=args["ext_cutoff_upper"],
+            equivariance_invariance_group=args["equivariance_invariance_group"],
             **shared_args,
         )
     else:
