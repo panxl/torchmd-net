@@ -339,6 +339,35 @@ class ExpNormalSmearing(nn.Module):
         )
 
 
+class BesselSmearing(nn.Module):
+    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=50, trainable=True, dtype=torch.float32):
+        super(BesselSmearing, self).__init__()
+        self.cutoff_lower = cutoff_lower
+        self.cutoff_upper = cutoff_upper
+        self.num_rbf = num_rbf
+        self.trainable = trainable
+        self.dtype = dtype
+        self.prefactor = 2.0 / cutoff_upper
+
+        coeff = self._initial_params()
+        if trainable:
+            self.register_parameter("coeff", nn.Parameter(coeff))
+        else:
+            self.register_buffer("coeff", coeff)
+
+    def _initial_params(self):
+        coeff = torch.linspace(start=1.0, end=self.num_rbf, steps=self.num_rbf) * math.pi / self.cutoff_upper 
+        return coeff
+
+    def reset_parameters(self):
+        coeff = self._initial_params()
+        self.coeff.data.copy_(coeff)
+
+    def forward(self, dist):
+        numerator = torch.sin(self.coeff * dist.unsqueeze(-1))
+        return self.prefactor * (numerator / dist.unsqueeze(-1))
+
+
 class ShiftedSoftplus(nn.Module):
     r"""Applies the ShiftedSoftplus function :math:`\text{ShiftedSoftplus}(x) = \frac{1}{\beta} *
     \log(1 + \exp(\beta * x))-\log(2)` element-wise.
@@ -383,6 +412,25 @@ class CosineCutoff(nn.Module):
             # remove contributions beyond the cutoff radius
             cutoffs = cutoffs * (distances < self.cutoff_upper)
             return cutoffs
+
+
+class PolynomialCutoff(nn.Module):
+    def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, p=6):
+        super(PolynomialCutoff, self).__init__()
+        self.cutoff_lower = cutoff_lower
+        self.cutoff_upper = cutoff_upper
+        self.p = float(p)
+
+    def forward(self, x):
+        x = x / self.cutoff_upper
+        p = self.p
+
+        out = 1.0
+        out = out - (((p + 1.0) * (p + 2.0) / 2.0) * torch.pow(x, p))
+        out = out + (p * (p + 2.0) * torch.pow(x, p + 1.0))
+        out = out - ((p * (p + 1.0) / 2) * torch.pow(x, p + 2.0))
+
+        return out * (x < 1.0)
 
 
 class Distance(nn.Module):
@@ -517,7 +565,7 @@ class GatedEquivariantBlock(nn.Module):
         return x, v
 
 
-rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing}
+rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing, "bessel": BesselSmearing}
 
 act_class_mapping = {
     "ssp": ShiftedSoftplus,
