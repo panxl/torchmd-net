@@ -55,6 +55,10 @@ class DataModule(LightningDataModule):
                     self.hparams["embed_files"],
                     self.hparams["energy_files"],
                     self.hparams["force_files"],
+                    self.hparams["ext_charge_coord_files"],
+                    self.hparams["ext_charge_files"],
+                    self.hparams["ext_esp_files"],
+                    self.hparams["ext_esp_grad_files"],
                 )
             else:
                 dataset_arg = {}

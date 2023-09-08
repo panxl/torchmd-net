@@ -62,12 +62,14 @@ class LNNP(LightningModule):
         self,
         z: Tensor,
         pos: Tensor,
+        ext_pos: Tensor,
+        ext_charge: Tensor,
         batch: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
-        extra_args: Optional[Dict[str, Tensor]] = None,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        return self.model(z, pos, batch=batch, q=q, s=s, extra_args=extra_args)
+        extra_args: Optional[Dict[str, Tensor]] = None
+    ) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor]]:
+        return self.model(z, pos, ext_pos=ext_pos, ext_charge=ext_charge, batch=batch, q=q, s=s, extra_args=extra_args)
 
     def training_step(self, batch, batch_idx):
         return self.step(batch, [mse_loss], "train")
@@ -87,7 +89,7 @@ class LNNP(LightningModule):
     def test_step(self, batch, batch_idx):
         return self.step(batch, [l1_loss], "test")
 
-    def _compute_losses(self, y, neg_y, batch, loss_fn, stage):
+    def _compute_losses(self, y, neg_y, esp, esp_grad, batch, loss_fn, stage):
         # Compute the loss for the predicted value and the negative derivative (if available)
         # Args:
         #   y: predicted value
@@ -97,17 +99,27 @@ class LNNP(LightningModule):
         # Returns:
         #   loss_y: loss for the predicted value
         #   loss_neg_y: loss for the predicted negative derivative
-        loss_y, loss_neg_y = 0.0, 0.0
+        loss_y, loss_neg_y, loss_esp, loss_esp_grad = 0.0, 0.0, 0.0, 0.0
         loss_name = loss_fn.__name__
         if self.hparams.derivative and "neg_dy" in batch:
             loss_neg_y = loss_fn(neg_y, batch.neg_dy)
             loss_neg_y = self._update_loss_with_ema(
                 stage, "neg_dy", loss_name, loss_neg_y
             )
+        if self.hparams.derivative and "esp" in batch:
+            loss_esp= loss_fn(esp, batch.esp)
+            loss_esp = self._update_loss_with_ema(
+                stage, "esp", loss_name, loss_esp
+            )
+        if self.hparams.derivative and "esp_grad" in batch:
+            loss_esp_grad = loss_fn(esp_grad, batch.esp_grad)
+            loss_esp_grad = self._update_loss_with_ema(
+                stage, "esp", loss_name, loss_esp_grad
+            )
         if "y" in batch:
             loss_y = loss_fn(y, batch.y)
             loss_y = self._update_loss_with_ema(stage, "y", loss_name, loss_y)
-        return {"y": loss_y, "neg_dy": loss_neg_y}
+        return {"y": loss_y, "neg_dy": loss_neg_y, "esp": loss_esp, "esp_grad": loss_esp_grad}
 
     def _update_loss_with_ema(self, stage, type, loss_name, loss):
         # Update the loss using an exponential moving average when applicable
@@ -140,14 +152,16 @@ class LNNP(LightningModule):
         assert self.losses is not None
         with torch.set_grad_enabled(stage == "train" or self.hparams.derivative):
             extra_args = batch.to_dict()
-            for a in ("y", "neg_dy", "z", "pos", "batch", "q", "s"):
+            for a in ("y", "neg_dy", "z", "pos", "ext_pos", "ext_charge", "esp", "esp_grad", "batch", "q", "s"):
                 if a in extra_args:
                     del extra_args[a]
             # TODO: the model doesn't necessarily need to return a derivative once
             # Union typing works under TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-            y, neg_dy = self(
+            y, neg_dy, esp, esp_grad = self(
                 batch.z,
                 batch.pos,
+                batch.ext_pos,
+                batch.ext_charge,
                 batch=batch.batch,
                 q=batch.q if self.hparams.charge else None,
                 s=batch.s if self.hparams.spin else None,
@@ -162,14 +176,22 @@ class LNNP(LightningModule):
         if "y" in batch and batch.y.ndim == 1:
             batch.y = batch.y.unsqueeze(1)
         for loss_fn in loss_fn_list:
-            step_losses = self._compute_losses(y, neg_dy, batch, loss_fn, stage)
+            step_losses = self._compute_losses(y, neg_dy, esp, esp_grad, batch, loss_fn, stage)
             total_loss = (
                 step_losses["y"] * self.hparams.y_weight
                 + step_losses["neg_dy"] * self.hparams.neg_dy_weight
+                + step_losses["esp"] * self.hparams.esp_weight
+                + step_losses["esp_grad"] * self.hparams.esp_grad_weight
             )
             loss_name = loss_fn.__name__
             self.losses[stage]["neg_dy"][loss_name].append(
                 step_losses["neg_dy"].detach()
+            )
+            self.losses[stage]["esp"][loss_name].append(
+                step_losses["esp"].detach()
+            )
+            self.losses[stage]["esp_grad"][loss_name].append(
+                step_losses["esp_grad"].detach()
             )
             self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
             self.losses[stage]["total"][loss_name].append(total_loss.detach())
@@ -215,6 +237,8 @@ class LNNP(LightningModule):
             result_dict |= self._get_mean_loss_dict_for_type("total")
             result_dict |= self._get_mean_loss_dict_for_type("y")
             result_dict |= self._get_mean_loss_dict_for_type("neg_dy")
+            result_dict |= self._get_mean_loss_dict_for_type("esp")
+            result_dict |= self._get_mean_loss_dict_for_type("esp_grad")
             # For retro compatibility with previous versions of TorchMD-Net we report some losses twice
             result_dict["val_loss"] = result_dict["val_total_mse_loss"]
             result_dict["train_loss"] = result_dict["train_total_mse_loss"]
@@ -231,6 +255,8 @@ class LNNP(LightningModule):
             result_dict |= self._get_mean_loss_dict_for_type("total")
             result_dict |= self._get_mean_loss_dict_for_type("y")
             result_dict |= self._get_mean_loss_dict_for_type("neg_dy")
+            result_dict |= self._get_mean_loss_dict_for_type("esp")
+            result_dict |= self._get_mean_loss_dict_for_type("esp_grad")
             # Get only test entries
             result_dict = {k: v for k, v in result_dict.items() if k.startswith("test")}
             self.log_dict(result_dict, sync_dist=True)
@@ -243,12 +269,12 @@ class LNNP(LightningModule):
         self.losses = {}
         for stage in ["train", "val", "test"]:
             self.losses[stage] = {}
-            for loss_type in ["total", "y", "neg_dy"]:
+            for loss_type in ["total", "y", "neg_dy", "esp", "esp_grad"]:
                 self.losses[stage][loss_type] = defaultdict(list)
 
     def _reset_ema_dict(self):
         self.ema = {}
         for stage in ["train", "val"]:
             self.ema[stage] = {}
-            for loss_type in ["y", "neg_dy"]:
+            for loss_type in ["y", "neg_dy", "esp", "esp_grad"]:
                 self.ema[stage][loss_type] = {}

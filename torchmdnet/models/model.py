@@ -81,6 +81,14 @@ def create_model(args, prior_model=None, mean=None, std=None):
 	    equivariance_invariance_group=args["equivariance_invariance_group"],
             **shared_args,
         )
+    elif args["model"] == "tensornet-ext":
+        from torchmdnet.models.tensornet_ext import TensorNet_Ext
+	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
+        is_equivariant = False
+        representation_model = TensorNet_Ext(
+	    equivariance_invariance_group=args["equivariance_invariance_group"],
+            **shared_args,
+        )
     else:
         raise ValueError(f'Unknown architecture: {args["model"]}')
 
@@ -232,11 +240,13 @@ class TorchMD_Net(nn.Module):
         self,
         z: Tensor,
         pos: Tensor,
+        ext_pos: Tensor,
+        ext_charge: Tensor,
         batch: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None
-    ) -> Tuple[Tensor, Optional[Tensor]]:
+    ) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor]]:
         """Compute the output of the model.
         Args:
             z (Tensor): Atomic numbers of the atoms in the molecule. Shape (N,).
@@ -252,9 +262,11 @@ class TorchMD_Net(nn.Module):
 
         if self.derivative:
             pos.requires_grad_(True)
+            ext_pos.requires_grad_(True)
+            ext_charge.requires_grad_(True)
 
         # run the potentially wrapped representation model
-        x, v, z, pos, batch = self.representation_model(z, pos, batch, q=q, s=s)
+        x, v, z, pos, batch = self.representation_model(z, pos, ext_pos=ext_pos, ext_charge=ext_charge, batch=batch, q=q, s=s)
 
         # apply the output network
         x = self.output_model.pre_reduce(x, v, z, pos, batch)
@@ -286,16 +298,20 @@ class TorchMD_Net(nn.Module):
         # compute gradients with respect to coordinates
         if self.derivative:
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
-            dy = grad(
+            dy, esp, esp_grad = grad(
                 [y],
-                [pos],
+                [pos, ext_charge, ext_pos],
                 grad_outputs=grad_outputs,
                 create_graph=True,
                 retain_graph=True,
-            )[0]
+            )
             if dy is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")
-
-            return y, -dy
+            if esp is None:
+                raise RuntimeError("Autograd returned None for the esp prediction.")
+            if esp_grad is None:
+                raise RuntimeError("Autograd returned None for the esp_grad prediction.")
+            esp_grad = esp_grad / ext_charge.unsqueeze(-1)
+            return y, -dy, esp, esp_grad
         # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return y, None
+        return y, None, None, None

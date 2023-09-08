@@ -17,7 +17,7 @@ from torchmdnet.models.model import create_prior_models
 from torchmdnet.models.utils import rbf_class_mapping, act_class_mapping, dtype_mapping
 from torchmdnet.utils import LoadFromFile, LoadFromCheckpoint, save_argparse, number
 from lightning_utilities.core.rank_zero import rank_zero_warn
-
+import torch
 
 def get_args():
     # fmt: off
@@ -38,6 +38,8 @@ def get_args():
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay strength')
     parser.add_argument('--ema-alpha-y', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of y')
     parser.add_argument('--ema-alpha-neg-dy', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of dy')
+    parser.add_argument('--ema-alpha-esp', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of esp')
+    parser.add_argument('--ema-alpha-esp-grad', type=float, default=1.0, help='The amount of influence of new losses on the exponential moving average of esp_grad')
     parser.add_argument('--ngpus', type=int, default=-1, help='Number of GPUs, -1 use all available. Use CUDA_VISIBLE_DEVICES=1, to decide gpus')
     parser.add_argument('--num-nodes', type=int, default=1, help='Number of nodes')
     parser.add_argument('--precision', type=int, default=32, choices=[16, 32, 64], help='Floating point precision')
@@ -59,10 +61,16 @@ def get_args():
     parser.add_argument('--dataset-arg', default=None, type=str, help='Additional dataset arguments, e.g. target property for QM9 or molecule for MD17. Need to be specified in JSON format i.e. \'{"molecules": "aspirin,benzene"}\'')
     parser.add_argument('--coord-files', default=None, type=str, help='Custom coordinate files glob')
     parser.add_argument('--embed-files', default=None, type=str, help='Custom embedding files glob')
+    parser.add_argument('--ext-charge-coord-files', default=None, type=str, help='Custom external charge coordinate files glob')
+    parser.add_argument('--ext-charge-files', default=None, type=str, help='Custom external charge files glob')
     parser.add_argument('--energy-files', default=None, type=str, help='Custom energy files glob')
     parser.add_argument('--force-files', default=None, type=str, help='Custom force files glob')
+    parser.add_argument('--ext-esp-files', default=None, type=str, help='Custom external electrostatic potential files glob')
+    parser.add_argument('--ext-esp-grad-files', default=None, type=str, help='Custom external electrostatic potential gradient files glob')
     parser.add_argument('--y-weight', default=1.0, type=float, help='Weighting factor for y label in the loss function')
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
+    parser.add_argument('--esp-weight', default=1.0, type=float, help='Weighting factor for esp label in the loss function')
+    parser.add_argument('--esp-grad-weight', default=1.0, type=float, help='Weighting factor for esp_grad label in the loss function')
 
     # model architecture
     parser.add_argument('--model', type=str, default='graph-network', choices=models.__all__, help='Which model to train')
@@ -170,10 +178,10 @@ def main():
         )
 
     trainer = pl.Trainer(
-        strategy=DDPStrategy(find_unused_parameters=False),
+        # strategy=DDPStrategy(find_unused_parameters=False),
         max_epochs=args.num_epochs,
-        accelerator="auto",
-        devices=args.ngpus,
+        accelerator="cpu",
+        # devices=args.ngpus,
         num_nodes=args.num_nodes,
         default_root_dir=args.log_dir,
         callbacks=[early_stopping, checkpoint_callback],
@@ -192,11 +200,14 @@ def main():
     trainer = pl.Trainer(
         logger=_logger,
         inference_mode=False,
-        accelerator="auto",
-        devices=args.ngpus,
+        accelerator="cpu",
+        #  devices=args.ngpus,
         num_nodes=args.num_nodes,
     )
     trainer.test(model, data)
+
+    script = model.to_torchscript()
+    torch.jit.save(script, "model.pt")
 
 
 if __name__ == "__main__":

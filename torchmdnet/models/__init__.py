@@ -1,1 +1,1 @@
-__all__ = ["graph-network", "transformer", "equivariant-transformer", "tensornet"]
+__all__ = ["graph-network", "transformer", "equivariant-transformer", "tensornet", "tensornet-ext"]

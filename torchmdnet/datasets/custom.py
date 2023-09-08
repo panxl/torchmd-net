@@ -30,18 +30,27 @@ class Custom(Dataset):
               - If present, "y" is an array of shape (1,) and "neg_dy" has shape (n_atoms, 3)
     """
 
-    def __init__(self, coordglob, embedglob, energyglob=None, forceglob=None):
+    def __init__(self, coordglob, embedglob, energyglob=None, forceglob=None,
+                 extcoordglob=None, extchargeglob=None, espglob=None, espgradglob=None):
         super(Custom, self).__init__()
         assert energyglob is not None or forceglob is not None, (
             "Either energies, forces or both must " "be specified as the target"
         )
         self.has_energies = energyglob is not None
         self.has_forces = forceglob is not None
+        self.has_extcoord = extcoordglob is not None
+        self.has_extcharge = extchargeglob is not None
+        self.has_esp = espglob is not None
+        self.has_espgrad = espgradglob is not None
 
         self.coordfiles = sorted(glob.glob(coordglob))
         self.embedfiles = sorted(glob.glob(embedglob))
         self.energyfiles = sorted(glob.glob(energyglob)) if self.has_energies else None
         self.forcefiles = sorted(glob.glob(forceglob)) if self.has_forces else None
+        self.extcoordfiles = sorted(glob.glob(extcoordglob)) if self.has_extcoord else None
+        self.extchargefiles = sorted(glob.glob(extchargeglob)) if self.has_extcharge else None
+        self.espfiles = sorted(glob.glob(espglob)) if self.has_esp else None
+        self.espgradfiles = sorted(glob.glob(espgradglob)) if self.has_espgrad else None
 
         assert len(self.coordfiles) == len(self.embedfiles), (
             f"Number of coordinate files {len(self.coordfiles)} "
@@ -86,6 +95,14 @@ class Custom(Dataset):
                     f"Data shape of coordinate file {i} {coord_data.shape} "
                     f"does not match the shape of force file {i} {force_data.shape}."
                 )
+            if self.has_extcoord:
+                extcoord_data = np.load(self.extcoordfiles[i])
+            if self.has_extcharge:
+                extcharge_data = np.load(self.extchargefiles[i])
+            if self.has_esp:
+                esp_data = np.load(self.espfiles[i])
+            if self.has_espgrad:
+                espgrad_data = np.load(self.espgradfiles[i])
         print("Combined dataset size {}".format(len(self.index)))
 
     def get(self, idx):
@@ -109,6 +126,19 @@ class Custom(Dataset):
                 np.load(self.forcefiles[fileid], mmap_mode="r")[index]
             )
             features["neg_dy"] = torch.from_numpy(force_data)
+
+        if self.has_extcoord:
+            extcoord_data = np.array(np.load(self.extcoordfiles[fileid], mmap_mode="r")[index])
+            features["ext_pos"] = torch.from_numpy(extcoord_data)
+        if self.has_extcharge:
+            extcharge_data = np.array(np.load(self.extchargefiles[fileid], mmap_mode="r")[index])
+            features["ext_charge"] = torch.from_numpy(extcharge_data)
+        if self.has_esp:
+            esp_data = np.array(np.load(self.espfiles[fileid], mmap_mode="r")[index])
+            features["esp"] = torch.from_numpy(esp_data)
+        if self.has_espgrad:
+            espgrad_data = np.array(np.load(self.espgradfiles[fileid], mmap_mode="r")[index])
+            features["esp_grad"] = torch.from_numpy(espgrad_data)
 
         return Data(**features)
 
