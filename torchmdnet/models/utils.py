@@ -347,7 +347,7 @@ class BesselSmearing(nn.Module):
         self.num_rbf = num_rbf
         self.trainable = trainable
         self.dtype = dtype
-        self.prefactor = 2.0 / cutoff_upper
+        self.cutoff_fn = PolynomialCutoff(0, cutoff_upper, p=6)
 
         coeff = self._initial_params()
         if trainable:
@@ -356,7 +356,7 @@ class BesselSmearing(nn.Module):
             self.register_buffer("coeff", coeff)
 
     def _initial_params(self):
-        coeff = torch.linspace(start=1.0, end=self.num_rbf, steps=self.num_rbf) * math.pi / self.cutoff_upper 
+        coeff = torch.arange(1, self.num_rbf + 1, dtype=self.dtype) * math.pi / self.cutoff_upper
         return coeff
 
     def reset_parameters(self):
@@ -364,8 +364,11 @@ class BesselSmearing(nn.Module):
         self.coeff.data.copy_(coeff)
 
     def forward(self, dist):
-        numerator = torch.sin(self.coeff * dist.unsqueeze(-1))
-        return self.prefactor * (numerator / dist.unsqueeze(-1))
+        mask = dist != 0.0
+        dist = dist.unsqueeze(-1)
+        out = torch.sin(self.coeff * dist)
+        out[mask] = out[mask] / dist[mask] * self.cutoff_fn(dist[mask])
+        return out
 
 
 class ShiftedSoftplus(nn.Module):
