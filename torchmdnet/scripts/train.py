@@ -187,8 +187,8 @@ def main():
     trainer = pl.Trainer(
         # strategy=DDPStrategy(find_unused_parameters=False),
         max_epochs=args.num_epochs,
-        accelerator="cpu",
-        # devices=args.ngpus,
+        accelerator="auto",
+        devices=args.ngpus,
         num_nodes=args.num_nodes,
         default_root_dir=args.log_dir,
         callbacks=[early_stopping, checkpoint_callback],
@@ -207,8 +207,8 @@ def main():
     trainer = pl.Trainer(
         logger=_logger,
         inference_mode=False,
-        accelerator="cpu",
-        # devices=args.ngpus,
+        accelerator="auto",
+        devices=args.ngpus,
         num_nodes=args.num_nodes,
     )
     trainer.test(model, data)
