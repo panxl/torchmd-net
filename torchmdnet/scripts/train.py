@@ -208,7 +208,7 @@ def main():
         logger=_logger,
         inference_mode=False,
         accelerator="cpu",
-        #  devices=args.ngpus,
+        # devices=args.ngpus,
         num_nodes=args.num_nodes,
     )
     trainer.test(model, data)
