@@ -214,7 +214,7 @@ def main():
     trainer.test(model, data)
 
     script = model.to_torchscript()
-    torch.jit.save(script, "model.pt")
+    torch.jit.save(script, os.path.join(args.log_dir, "model.pt"))
 
 
 if __name__ == "__main__":
