@@ -307,8 +307,8 @@ class TorchMD_Net(nn.Module):
                 [y],
                 [pos, ext_charge, ext_pos],
                 grad_outputs=grad_outputs,
-                create_graph=True,
-                retain_graph=True,
+                create_graph=self.training,
+                retain_graph=self.training,
             )
             if dy is None:
                 raise RuntimeError("Autograd returned None for the force prediction.")

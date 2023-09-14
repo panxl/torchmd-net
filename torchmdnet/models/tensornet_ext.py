@@ -67,7 +67,7 @@ def tensor_norm(tensor):
 
 
 def ext_distance(pos, ext_pos, batch):
-    batch_size = int(batch.max() + 1)
+    batch_size = int(batch.max()) + 1
     pos = pos.reshape(batch_size, -1, 3)
     ext_pos = ext_pos.reshape(batch_size, -1, 3)
     edge_vec = pos.unsqueeze(2) - ext_pos.unsqueeze(1)
@@ -398,7 +398,7 @@ class Interaction_Ext(nn.Module):
 
     def forward(self, pos, ext_pos, ext_charge, batch):
         ext_weight, ext_vec = ext_distance(pos, ext_pos, batch)
-        batch_size = int(batch.max() + 1)
+        batch_size = int(batch.max()) + 1
         ext_charge = ext_charge.reshape(batch_size, 1, -1)
 
         # Expand distances with radial basis functions
