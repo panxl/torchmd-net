@@ -382,12 +382,12 @@ class Interaction_Ext(nn.Module):
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
         self.linears_scalar = nn.ModuleList()
-        self.linears_scalar.append(nn.Linear(num_rbf, hidden_channels, bias=False, dtype=dtype))
+        self.linears_scalar.append(nn.Linear(num_rbf, hidden_channels, bias=True, dtype=dtype))
         self.linears_scalar.append(
-            nn.Linear(hidden_channels, 2 * hidden_channels, bias=False, dtype=dtype)
+            nn.Linear(hidden_channels, 2 * hidden_channels, bias=True, dtype=dtype)
         )
         self.linears_scalar.append(
-            nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=False, dtype=dtype)
+            nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True, dtype=dtype)
         )
 
         self.reset_parameters()
@@ -406,7 +406,9 @@ class Interaction_Ext(nn.Module):
 
         for linear_scalar in self.linears_scalar:
             ext_attr = self.act(linear_scalar(ext_attr))
-        ext_attr = ext_attr.reshape(ext_attr.shape[0], ext_attr.shape[1], ext_attr.shape[2], self.hidden_channels, 3)
+        ext_attr = (ext_attr * self.cutoff(ext_weight).unsqueeze(-1)).reshape(
+            ext_attr.shape[0], ext_attr.shape[1], ext_attr.shape[2], self.hidden_channels, 3
+        )
         ext_attr *= ext_charge.unsqueeze(-1).unsqueeze(-1)
         ext_attr = ext_attr.reshape(-1, self.hidden_channels, 3)
 
