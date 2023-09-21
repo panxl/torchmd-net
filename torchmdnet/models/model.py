@@ -75,6 +75,7 @@ def create_model(args, prior_model=None, mean=None, std=None):
         )
     elif args["model"] == "tensornet":
         from torchmdnet.models.tensornet import TensorNet
+
 	# Setting is_equivariant to False to enforce the use of Scalar output module instead of EquivariantScalar
         is_equivariant = False
         representation_model = TensorNet(
@@ -299,8 +300,8 @@ class TorchMD_Net(nn.Module):
         if self.prior_model is not None:
             for prior in self.prior_model:
                 y = prior.post_reduce(y, z, pos, batch, extra_args)
-
         # compute gradients with respect to coordinates
+
         if self.derivative:
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
             dy, esp, esp_grad = grad(
