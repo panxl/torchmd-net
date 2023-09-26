@@ -177,23 +177,28 @@ class LNNP(LightningModule):
             batch.y = batch.y.unsqueeze(1)
         for loss_fn in loss_fn_list:
             step_losses = self._compute_losses(y, neg_dy, esp, esp_grad, batch, loss_fn, stage)
+
+            loss_name = loss_fn.__name__
+            if self.hparams.neg_dy_weight > 0:
+                self.losses[stage]["neg_dy"][loss_name].append(
+                    step_losses["neg_dy"].detach()
+                )
+            if self.hparams.esp_weight > 0:
+                self.losses[stage]["esp"][loss_name].append(
+                    step_losses["esp"].detach()
+                )
+            if self.hparams.esp_grad_weight > 0:
+                self.losses[stage]["esp_grad"][loss_name].append(
+                    step_losses["esp_grad"].detach()
+                )
+            if self.hparams.y_weight > 0:
+                self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
             total_loss = (
                 step_losses["y"] * self.hparams.y_weight
                 + step_losses["neg_dy"] * self.hparams.neg_dy_weight
                 + step_losses["esp"] * self.hparams.esp_weight
                 + step_losses["esp_grad"] * self.hparams.esp_grad_weight
             )
-            loss_name = loss_fn.__name__
-            self.losses[stage]["neg_dy"][loss_name].append(
-                step_losses["neg_dy"].detach()
-            )
-            self.losses[stage]["esp"][loss_name].append(
-                step_losses["esp"].detach()
-            )
-            self.losses[stage]["esp_grad"][loss_name].append(
-                step_losses["esp_grad"].detach()
-            )
-            self.losses[stage]["y"][loss_name].append(step_losses["y"].detach())
             self.losses[stage]["total"][loss_name].append(total_loss.detach())
         return total_loss
 
@@ -239,11 +244,6 @@ class LNNP(LightningModule):
             result_dict.update(self._get_mean_loss_dict_for_type("neg_dy"))
             result_dict.update(self._get_mean_loss_dict_for_type("esp"))
             result_dict.update(self._get_mean_loss_dict_for_type("esp_grad"))
-            # For retro compatibility with previous versions of TorchMD-Net we report some losses twice
-            result_dict["val_loss"] = result_dict["val_total_mse_loss"]
-            result_dict["train_loss"] = result_dict["train_total_mse_loss"]
-            if "test_total_l1_loss" in result_dict:
-                result_dict["test_loss"] = result_dict["test_total_l1_loss"]
             self.log_dict(result_dict, sync_dist=True)
 
         self._reset_losses_dict()
