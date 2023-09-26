@@ -9,6 +9,7 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     EarlyStopping,
 )
+from lightning.pytorch.plugins.environments import SLURMEnvironment
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -118,6 +119,7 @@ def get_args():
     parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
     parser.add_argument('--wandb-resume-from-id', default=None, type=str, help='Resume a wandb run from a given run id. The id can be retrieved from the wandb dashboard')
     parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
+    parser.add_argument('--slurm-use', default=False, type=bool, help='Defines if SLURM is used or not')
 
     # fmt: on
 
@@ -182,7 +184,7 @@ def main():
             args.log_dir, name="tensorbord", version="", default_hp_metric=False
         )
         _logger.append(tb_logger)
-    if args.test_interval > 0:
+    if args.test_interval > 0 and len(data.test_dataset) > 0:
         rank_zero_warn(
             f"WARNING: Test set will be evaluated every {args.test_interval} epochs. This will slow down training."
         )
@@ -200,7 +202,8 @@ def main():
         gradient_clip_val=args.gradient_clipping,
         inference_mode=False,
         # Test-during-training requires reloading the dataloaders every epoch
-        reload_dataloaders_every_n_epochs=1 if args.test_interval > 0 else 0,
+        reload_dataloaders_every_n_epochs=1 if args.test_interval > 0 and len(data.test_dataset) > 0 else 0,
+        plugins=[SLURMEnvironment()] if args.slurm_use else None,
     )
 
     trainer.fit(model, data, ckpt_path=None if args.reset_trainer else args.load_model)
