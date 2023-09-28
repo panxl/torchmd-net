@@ -9,7 +9,6 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     EarlyStopping,
 )
-from lightning.pytorch.plugins.environments import SLURMEnvironment
 from torchmdnet.module import LNNP
 from torchmdnet import datasets, priors, models
 from torchmdnet.data import DataModule
@@ -119,7 +118,6 @@ def get_args():
     parser.add_argument('--wandb-project', default='training_', type=str, help='Define what wandb Project to log to')
     parser.add_argument('--wandb-resume-from-id', default=None, type=str, help='Resume a wandb run from a given run id. The id can be retrieved from the wandb dashboard')
     parser.add_argument('--tensorboard-use', default=False, type=bool, help='Defines if tensor board is used or not')
-    parser.add_argument('--slurm-use', default=False, type=bool, help='Defines if SLURM is used or not')
 
     # fmt: on
 
@@ -192,8 +190,8 @@ def main():
     trainer = pl.Trainer(
         # strategy=DDPStrategy(find_unused_parameters=False),
         max_epochs=args.num_epochs,
-        accelerator="auto",
-        devices=args.ngpus,
+        accelerator="cpu",
+        # devices=args.ngpus,
         num_nodes=args.num_nodes,
         default_root_dir=args.log_dir,
         callbacks=[early_stopping, checkpoint_callback],
@@ -203,7 +201,6 @@ def main():
         inference_mode=False,
         # Test-during-training requires reloading the dataloaders every epoch
         reload_dataloaders_every_n_epochs=1 if args.test_interval > 0 and len(data.test_dataset) > 0 else 0,
-        plugins=[SLURMEnvironment()] if args.slurm_use else None,
     )
 
     trainer.fit(model, data, ckpt_path=None if args.reset_trainer else args.load_model)
@@ -218,8 +215,8 @@ def main():
     trainer = pl.Trainer(
         logger=_logger,
         inference_mode=False,
-        accelerator="auto",
-        devices=args.ngpus,
+        accelerator="cpu",
+        # devices=args.ngpus,
         num_nodes=args.num_nodes,
     )
     trainer.test(model, data)
