@@ -107,7 +107,6 @@ class NeighborEmbedding(MessagePassing):
     def message(self, x_j, W):
         return x_j * W
 
-from torchmdnet.neighbors import get_neighbor_pairs_kernel
 
 class OptimizedDistance(torch.nn.Module):
     def __init__(
@@ -202,6 +201,8 @@ class OptimizedDistance(torch.nn.Module):
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
         self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
         self.check_errors = check_errors
+        from torchmdnet.neighbors import get_neighbor_pairs_kernel
+        self.kernel = get_neighbor_pairs_kernel;
         self.long_edge_index = long_edge_index
 
     def forward(
@@ -236,7 +237,7 @@ class OptimizedDistance(torch.nn.Module):
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
             batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
-        edge_index, edge_vec, edge_weight, num_pairs = get_neighbor_pairs_kernel(
+        edge_index, edge_vec, edge_weight, num_pairs = self.kernel(
             strategy=self.strategy,
             positions=pos,
             batch=batch,
@@ -614,8 +615,7 @@ static auto registry = torch::RegisterOperators()
         extra_cflags=["-DWITH_CUDA"] if torch.cuda.is_available() else None,
         verbose=True,
     )
-_compile_check_stream_capturing()
-@torch.jit.script
+
 def check_stream_capturing():
     """
     Returns True if the current CUDA stream is capturing.
@@ -623,6 +623,7 @@ def check_stream_capturing():
 
     This utility is required because the builtin torch function that does this is not scriptable.
     """
+    _compile_check_stream_capturing()
     return torch.ops.torch_extension.is_stream_capturing()
 
 rbf_class_mapping = {"gauss": GaussianSmearing, "expnorm": ExpNormalSmearing, "bessel": BesselSmearing}

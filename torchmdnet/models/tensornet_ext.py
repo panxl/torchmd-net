@@ -5,7 +5,7 @@ from torch import Tensor, nn
 from torch_scatter import scatter
 from torchmdnet.models.utils import (
     CosineCutoff,
-    OptimizedDistance,
+    Distance,
     rbf_class_mapping,
     act_class_mapping,
 )
@@ -106,9 +106,6 @@ class TensorNet_Ext(nn.Module):
             positions internal tensor features will be equivariant and scalar predictions
             will be invariant. O(3) or SO(3).
             (default :obj:`"O(3)"`)
-        static_shapes (bool, optional): Whether to enforce static shapes.
-            Makes the model CUDA-graph compatible.
-            (default: :obj:`True`)
     """
 
     def __init__(
@@ -129,7 +126,6 @@ class TensorNet_Ext(nn.Module):
         max_num_neighbors=64,
         max_z=128,
         equivariance_invariance_group="O(3)",
-        static_shapes=True,
         dtype=torch.float32,
     ):
         super(TensorNet_Ext, self).__init__()
@@ -156,6 +152,9 @@ class TensorNet_Ext(nn.Module):
         self.cutoff_lower = cutoff_lower
         self.cutoff_upper = cutoff_upper
         act_class = act_class_mapping[activation]
+        self.distance = Distance(
+            cutoff_lower, cutoff_upper, max_num_neighbors, return_vecs=True, loop=True
+        )
         self.distance_expansion = rbf_class_mapping[rbf_type](
             cutoff_lower, cutoff_upper, num_rbf, trainable_rbf
         )
@@ -197,21 +196,6 @@ class TensorNet_Ext(nn.Module):
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
         self.out_norm = nn.LayerNorm(3 * hidden_channels, dtype=dtype)
         self.act = act_class()
-        # Resize to fit set to false ensures Distance returns a statically-shaped tensor of size max_num_pairs=pos.size*max_num_neigbors
-        # negative max_num_pairs argument means "per particle"
-        # long_edge_index set to False saves memory and spares some kernel launches by keeping neighbor indices as int32.
-        self.static_shapes = static_shapes
-        self.distance = OptimizedDistance(
-            cutoff_lower,
-            cutoff_upper,
-            max_num_pairs=-max_num_neighbors,
-            return_vecs=True,
-            loop=True,
-            check_errors=False,
-            resize_to_fit=not self.static_shapes,
-            long_edge_index=True,
-        )
-
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -237,14 +221,6 @@ class TensorNet_Ext(nn.Module):
         assert (
             edge_vec is not None
         ), "Distance module did not return directional information"
-        # Distance module returns -1 for non-existing edges, to avoid having to resize the tensors when we want to ensure static shapes (for CUDA graphs) we make all non-existing edges pertain to the first atom
-        if self.static_shapes:
-            mask = (edge_index[0] >= 0).unsqueeze(0).expand_as(edge_index)
-            # I trick the model into thinking that the masked edges pertain to the first atom
-            # WARNING: This can hurt performance if max_num_pairs >> actual_num_pairs
-            edge_index = edge_index * mask
-            edge_weight = edge_weight * mask[0]
-            edge_vec = edge_vec * mask[0].unsqueeze(-1).expand_as(edge_vec)
         edge_attr = self.distance_expansion(edge_weight)
         mask = edge_index[0] == edge_index[1]
         # Normalizing edge vectors by their length can result in NaNs, breaking Autograd.
