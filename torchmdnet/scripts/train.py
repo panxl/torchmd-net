@@ -190,7 +190,7 @@ def main():
     trainer = pl.Trainer(
         # strategy=DDPStrategy(find_unused_parameters=False),
         max_epochs=args.num_epochs,
-        accelerator="auto",
+        accelerator="cpu",
         devices=args.ngpus,
         num_nodes=args.num_nodes,
         default_root_dir=args.log_dir,
@@ -215,11 +215,13 @@ def main():
     trainer = pl.Trainer(
         logger=_logger,
         inference_mode=False,
-        accelerator="auto",
+        accelerator="cpu",
         devices=args.ngpus,
         num_nodes=args.num_nodes,
     )
-    trainer.test(model, data)
+
+    if len(data.test_dataset) > 0:
+        trainer.test(model, data)
 
     script = model.to_torchscript()
     torch.jit.save(script, os.path.join(args.log_dir, "model.pt"))
