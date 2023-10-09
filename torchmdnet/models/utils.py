@@ -201,8 +201,6 @@ class OptimizedDistance(torch.nn.Module):
                 self.box = torch.tensor([[lbox, 0, 0], [0, lbox, 0], [0, 0, lbox]])
         self.box = self.box.cpu()  # All strategies expect the box to be in CPU memory
         self.check_errors = check_errors
-        from torchmdnet.neighbors import get_neighbor_pairs_kernel
-        self.kernel = get_neighbor_pairs_kernel;
         self.long_edge_index = long_edge_index
 
     def forward(
@@ -237,7 +235,7 @@ class OptimizedDistance(torch.nn.Module):
             max_pairs = -self.max_num_pairs * pos.shape[0]
         if batch is None:
             batch = torch.zeros(pos.shape[0], dtype=torch.long, device=pos.device)
-        edge_index, edge_vec, edge_weight, num_pairs = self.kernel(
+        edge_index, edge_vec, edge_weight, num_pairs = get_neighbor_pairs_kernel(
             strategy=self.strategy,
             positions=pos,
             batch=batch,
