@@ -67,7 +67,7 @@ class LNNP(LightningModule):
         batch: Optional[Tensor] = None,
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
-        extra_args: Optional[Dict[str, Tensor]] = None
+        extra_args: Optional[Dict[str, Tensor]] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor]]:
         return self.model(z, pos, ext_pos=ext_pos, ext_charge=ext_charge, batch=batch, q=q, s=s, extra_args=extra_args)
 

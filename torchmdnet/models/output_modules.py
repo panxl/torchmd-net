@@ -16,6 +16,7 @@ class OutputModel(nn.Module, metaclass=ABCMeta):
         super(OutputModel, self).__init__()
         self.allow_prior_model = allow_prior_model
         self.reduce_op = reduce_op
+        self.dim_size = 0
 
     def reset_parameters(self):
         pass
