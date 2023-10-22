@@ -204,7 +204,7 @@ class TensorNet_Ext(nn.Module):
             loop=True,
             check_errors=False,
             resize_to_fit=True,
-            long_edge_index=False,
+            long_edge_index=True,
         )
 
         self.reset_parameters()
