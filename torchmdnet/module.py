@@ -99,7 +99,12 @@ class LNNP(LightningModule):
         # Returns:
         #   loss_y: loss for the predicted value
         #   loss_neg_y: loss for the predicted negative derivative
-        loss_y, loss_neg_y, loss_esp, loss_esp_grad = 0.0, 0.0, 0.0, 0.0
+        loss_y, loss_neg_y, loss_esp, loss_esp_grad = (
+            torch.tensor(0.0, device=self.device),
+            torch.tensor(0.0, device=self.device),
+            torch.tensor(0.0, device=self.device),
+            torch.tensor(0.0, device=self.device),
+        )
         loss_name = loss_fn.__name__
         if self.hparams.derivative and "neg_dy" in batch:
             loss_neg_y = loss_fn(neg_y, batch.neg_dy)
