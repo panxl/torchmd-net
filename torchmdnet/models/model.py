@@ -295,7 +295,7 @@ class TorchMD_Net(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
+    ) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor]]:
         """
         Compute the output of the model.
 
