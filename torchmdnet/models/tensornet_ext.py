@@ -63,10 +63,10 @@ def ext_distance(pos, ext_pos, batch, cutoff):
     pos = pos.reshape(batch_size, -1, 3)
     ext_pos = ext_pos.reshape(batch_size, -1, 3)
     ext_index = (
-        torch.arange(batch_size).repeat_interleave(pos.shape[1] * ext_pos.shape[1]),
-        torch.arange(ext_pos.shape[1]).repeat(batch_size * pos.shape[1])
+        torch.arange(batch_size, device=pos.device).repeat_interleave(pos.shape[1] * ext_pos.shape[1]),
+        torch.arange(ext_pos.shape[1], device=pos.device).repeat(batch_size * pos.shape[1])
     )
-    edge_index = torch.arange(batch_size * pos.shape[1]).repeat_interleave(ext_pos.shape[1])
+    edge_index = torch.arange(batch_size * pos.shape[1], device=pos.device).repeat_interleave(ext_pos.shape[1])
     ext_vec = pos.unsqueeze(2) - ext_pos.unsqueeze(1)
     ext_vec = ext_vec.reshape(-1, 3)
     ext_weight = torch.norm(ext_vec, dim=-1)
