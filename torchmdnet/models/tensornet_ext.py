@@ -6,6 +6,7 @@ from torchmdnet.models.utils import (
     OptimizedDistance,
     rbf_class_mapping,
     act_class_mapping,
+    scatter,
 )
 
 __all__ = ["TensorNet_Ext"]
@@ -56,14 +57,25 @@ def tensor_norm(tensor):
     return (tensor**2).sum((-2, -1))
 
 
-def ext_distance(pos, ext_pos, batch):
+def ext_distance(pos, ext_pos, batch, cutoff):
     """Computes distances between atoms and external charges."""
     batch_size = int(batch.max()) + 1
     pos = pos.reshape(batch_size, -1, 3)
     ext_pos = ext_pos.reshape(batch_size, -1, 3)
-    edge_vec = pos.unsqueeze(2) - ext_pos.unsqueeze(1)
-    edge_weight = torch.norm(edge_vec, dim=-1)
-    return edge_weight, edge_vec
+    ext_index = (
+        torch.arange(batch_size).repeat_interleave(pos.shape[1] * ext_pos.shape[1]),
+        torch.arange(ext_pos.shape[1]).repeat(batch_size * pos.shape[1])
+    )
+    edge_index = torch.arange(batch_size * pos.shape[1]).repeat_interleave(ext_pos.shape[1])
+    ext_vec = pos.unsqueeze(2) - ext_pos.unsqueeze(1)
+    ext_vec = ext_vec.reshape(-1, 3)
+    ext_weight = torch.norm(ext_vec, dim=-1)
+    mask = ext_weight < cutoff
+    ext_index = (ext_index[0][mask], ext_index[1][mask])
+    ext_weight = ext_weight[mask]
+    ext_vec = ext_vec[mask]
+    edge_index = edge_index[mask]
+    return ext_index, ext_weight, ext_vec, edge_index
 
 
 class TensorNet_Ext(nn.Module):
@@ -408,9 +420,11 @@ class Interaction_Ext(nn.Module):
             linear.reset_parameters()
 
     def forward(self, pos, ext_pos, ext_charge, batch):
-        ext_weight, ext_vec = ext_distance(pos, ext_pos, batch)
+        cutoff = self.cutoff.cutoff_upper
+        ext_index, ext_weight, ext_vec, edge_index = ext_distance(pos, ext_pos, batch, cutoff)
         batch_size = int(batch.max()) + 1
-        ext_charge = ext_charge.reshape(batch_size, 1, -1, 1)
+        ext_charge = ext_charge.reshape(batch_size, -1, 1)
+        ext_charge = ext_charge[ext_index]
 
         # Expand distances with radial basis functions
         ext_attr = self.ext_distance_expansion(ext_weight)
@@ -433,7 +447,7 @@ class Interaction_Ext(nn.Module):
             vector_to_symtensor(ext_vec)[..., None, :, :]
             * ext_attr[..., 2, None, None]
         )
-        msg_ext = (Ie + Ae + Se).reshape(batch.size(0), -1, self.hidden_channels, 3, 3).sum(1)
+        msg_ext = scatter((Ie + Ae + Se), edge_index)
         return msg_ext
 
 
