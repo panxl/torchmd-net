@@ -56,22 +56,31 @@ def tensor_norm(tensor):
     """Computes Frobenius norm."""
     return (tensor**2).sum((-2, -1))
 
-
-def ext_distance(pos, ext_pos, batch, cutoff):
+def ext_distance(
+    pos: Tensor, ext_pos: Tensor, batch: Tensor, cutoff: float
+) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Computes distances between atoms and external charges."""
     batch_size = int(batch.max()) + 1
     pos = pos.reshape(batch_size, -1, 3)
     ext_pos = ext_pos.reshape(batch_size, -1, 3)
-    ext_index = (
-        torch.arange(batch_size, device=pos.device).repeat_interleave(pos.shape[1] * ext_pos.shape[1]),
-        torch.arange(ext_pos.shape[1], device=pos.device).repeat(batch_size * pos.shape[1])
+    ext_index = torch.vstack(
+        (
+            torch.arange(batch_size, device=pos.device).repeat_interleave(
+                pos.shape[1] * ext_pos.shape[1]
+            ),
+            torch.arange(ext_pos.shape[1], device=pos.device).repeat(
+                batch_size * pos.shape[1]
+            ),
+        )
     )
-    edge_index = torch.arange(batch_size * pos.shape[1], device=pos.device).repeat_interleave(ext_pos.shape[1])
+    edge_index = torch.arange(
+        batch_size * pos.shape[1], device=pos.device
+    ).repeat_interleave(ext_pos.shape[1])
     ext_vec = pos.unsqueeze(2) - ext_pos.unsqueeze(1)
     ext_vec = ext_vec.reshape(-1, 3)
     ext_weight = torch.norm(ext_vec, dim=-1)
     mask = ext_weight < cutoff
-    ext_index = (ext_index[0][mask], ext_index[1][mask])
+    ext_index = ext_index[:, mask]
     ext_weight = ext_weight[mask]
     ext_vec = ext_vec[mask]
     edge_index = edge_index[mask]
@@ -424,7 +433,7 @@ class Interaction_Ext(nn.Module):
         ext_index, ext_weight, ext_vec, edge_index = ext_distance(pos, ext_pos, batch, cutoff)
         batch_size = int(batch.max()) + 1
         ext_charge = ext_charge.reshape(batch_size, -1, 1)
-        ext_charge = ext_charge[ext_index]
+        ext_charge = ext_charge[(ext_index[0], ext_index[1])]
 
         # Expand distances with radial basis functions
         ext_attr = self.ext_distance_expansion(ext_weight)
