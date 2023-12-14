@@ -192,16 +192,15 @@ class TensorNet_Ext(nn.Module):
                     )
                 )
         self.ext_layer = Interaction_Ext(
-                        ext_num_rbf,
-                        ext_rbf_type,
-                        ext_trainable_rbf,
-                        hidden_channels,
-                        act_class,
-                        ext_cutoff_lower,
-                        ext_cutoff_upper,
-                        equivariance_invariance_group,
-                        dtype,
-                    )
+            ext_num_rbf,
+            ext_rbf_type,
+            ext_trainable_rbf,
+            hidden_channels,
+            act_class,
+            ext_cutoff_lower,
+            ext_cutoff_upper,
+            dtype,
+        )
         self.linear = nn.Linear(3 * hidden_channels, hidden_channels, dtype=dtype)
         self.out_norm = nn.LayerNorm(3 * hidden_channels, dtype=dtype)
         self.act = act_class()
@@ -250,9 +249,11 @@ class TensorNet_Ext(nn.Module):
         # I avoid dividing by zero by setting the weight of self edges and self loops to 1
         edge_vec = edge_vec / edge_weight.masked_fill(mask, 1).unsqueeze(1)
         X = self.tensor_embedding(z, edge_index, edge_weight, edge_vec, edge_attr)
+        # Interaction from external charges
+        msg_ext = self.ext_layer(pos, ext_pos, ext_charge, batch)
+        # Interaction layers
         for layer in self.layers:
-            X = layer(X, edge_index, edge_weight, edge_attr)
-        X = self.ext_layer(X, pos, ext_pos, ext_charge, batch)
+            X = layer(X, edge_index, edge_weight, edge_attr, msg_ext)
         I, A, S = decompose_tensor(X)
         x = torch.cat((tensor_norm(I), tensor_norm(A), tensor_norm(S)), dim=-1)
         x = self.out_norm(x)
@@ -400,7 +401,6 @@ class Interaction_Ext(nn.Module):
         activation,
         cutoff_lower,
         cutoff_upper,
-        equivariance_invariance_group,
         dtype=torch.float32,
     ):
         super(Interaction_Ext, self).__init__()
@@ -421,29 +421,14 @@ class Interaction_Ext(nn.Module):
         self.linears_scalar.append(
             nn.Linear(2 * hidden_channels, 3 * hidden_channels, bias=True, dtype=dtype)
         )
-        self.linears_tensor = nn.ModuleList()
-        for _ in range(6):
-            self.linears_tensor.append(
-                nn.Linear(hidden_channels, hidden_channels, bias=False)
-            )
         self.act = activation()
-        self.equivariance_invariance_group = equivariance_invariance_group
         self.reset_parameters()
 
     def reset_parameters(self):
         for linear in self.linears_scalar:
             linear.reset_parameters()
-        for linear in self.linears_tensor:
-            linear.reset_parameters()
 
-    def forward(self, X: Tensor, pos, ext_pos, ext_charge, batch):
-        X = X / (tensor_norm(X) + 1)[..., None, None]
-        I, A, S = decompose_tensor(X)
-        I = self.linears_tensor[0](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        A = self.linears_tensor[1](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[2](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        Y = I + A + S
-
+    def forward(self, pos, ext_pos, ext_charge, batch):
         cutoff = self.cutoff.cutoff_upper
         ext_index, ext_weight, ext_vec, edge_index = ext_distance(pos, ext_pos, batch, cutoff)
         batch_size = int(batch.max()) + 1
@@ -471,22 +456,8 @@ class Interaction_Ext(nn.Module):
             vector_to_symtensor(ext_vec)[..., None, :, :]
             * ext_attr[..., 2, None, None]
         )
-        msg = scatter((Ie + Ae + Se), edge_index)
-        if self.equivariance_invariance_group == "O(3)":
-            A = torch.matmul(msg, Y)
-            B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(A + B)
-        if self.equivariance_invariance_group == "SO(3)":
-            B = torch.matmul(Y, msg)
-            I, A, S = decompose_tensor(2 * B)
-        normp1 = (tensor_norm(I + A + S) + 1)[..., None, None]
-        I, A, S = I / normp1, A / normp1, S / normp1
-        I = self.linears_tensor[3](I.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        A = self.linears_tensor[4](A.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        S = self.linears_tensor[5](S.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        dX = I + A + S
-        X = X + dX + torch.matrix_power(dX, 2)
-        return X
+        msg_ext = scatter((Ie + Ae + Se), edge_index)
+        return msg_ext
 
 
 class Interaction(nn.Module):
@@ -535,8 +506,13 @@ class Interaction(nn.Module):
             linear.reset_parameters()
 
     def forward(
-        self, X: Tensor, edge_index: Tensor, edge_weight: Tensor, edge_attr: Tensor
-    ) -> Tensor:
+            self,
+            X: Tensor,
+            edge_index: Tensor,
+            edge_weight: Tensor,
+            edge_attr: Tensor,
+            msg_ext: Optional[Tensor] = None,
+            ) -> Tensor:
 
         C = self.cutoff(edge_weight)
         for linear_scalar in self.linears_scalar:
@@ -560,6 +536,8 @@ class Interaction(nn.Module):
             edge_index, edge_attr[..., 2, None, None], S, X.shape[0]
         )
         msg = Im + Am + Sm
+        if msg_ext is not None:
+            msg = msg + msg_ext
         if self.equivariance_invariance_group == "O(3)":
             A = torch.matmul(msg, Y)
             B = torch.matmul(Y, msg)
