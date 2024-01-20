@@ -29,34 +29,7 @@ We recommend using [Mamba](https://github.com/conda-forge/miniforge/#mambaforge)
 
 ### Install from source  
 
-1. Clone the repository:
-    ```shell
-    git clone https://github.com/torchmd/torchmd-net.git
-    cd torchmd-net
-    ```
-
-2. Install the dependencies in environment.yml. You can do it via pip, but we recommend [Mambaforge](https://github.com/conda-forge/miniforge/#mambaforge) instead:  
-
-    ```shell
-    mamba env create -f environment.yml
-    mamba activate torchmd-net
-    ```
-
-3. CUDA enabled installation  
-   You can skip this section if you only need a CPU installation.
-
-	```shell
-	mamba install cuda-nvcc cuda-libraries-dev cuda-version "gxx<12" pytorch=*=*cuda*
-	```
-gxx<12 is required due to a [bug in GCC+CUDA12](https://github.com/pybind/pybind11/issues/4606) that prevents pybind11 from compiling correctly.
-	      
-4. Install TorchMD-NET into the environment:
-    ```shell
-    pip install -e .
-    ```
-This will install TorchMD-NET in editable mode, so that changes to the source code are immediately available.
-Besides making all python utilities available environment-wide, this will also install the `torchmd-train` command line utility.
-
+TorchMD-Net is installed using pip, but you will need to install some dependencies before. Check [this documentation page](https://torchmd-net.readthedocs.io/en/latest/installation.html#install-from-source).  
 
 ## Usage
 Specifying training arguments can either be done via a configuration yaml file or through command line arguments directly. Several examples of architectural and training specifications for some models and datasets can be found in [examples/](https://github.com/torchmd/torchmd-net/tree/main/examples). Note that if a parameter is present both in the yaml file and the command line, the command line version takes precedence.
@@ -126,26 +99,30 @@ url={https://openreview.net/forum?id=zNHzqZ9wrRB}
 #### Graph Network 
 
 ```
-@misc{majewski2022machine,
-      title={Machine Learning Coarse-Grained Potentials of Protein Thermodynamics}, 
-      author={Maciej Majewski and Adrià Pérez and Philipp Thölke and Stefan Doerr and Nicholas E. Charron and Toni Giorgino and Brooke E. Husic and Cecilia Clementi and Frank Noé and Gianni De Fabritiis},
-      year={2022},
-      eprint={2212.07492},
-      archivePrefix={arXiv},
-      primaryClass={q-bio.BM}
+@article{Majewski2023,
+  title = {Machine learning coarse-grained potentials of protein thermodynamics},
+  volume = {14},
+  ISSN = {2041-1723},
+  url = {http://dx.doi.org/10.1038/s41467-023-41343-1},
+  DOI = {10.1038/s41467-023-41343-1},
+  number = {1},
+  journal = {Nature Communications},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Majewski,  Maciej and Pérez,  Adrià and Th\"{o}lke,  Philipp and Doerr,  Stefan and Charron,  Nicholas E. and Giorgino,  Toni and Husic,  Brooke E. and Clementi,  Cecilia and Noé,  Frank and De Fabritiis,  Gianni},
+  year = {2023},
+  month = sep 
 }
 ```
 
 #### TensorNet
 
 ```
-@misc{simeon2023tensornet,
-      title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials}, 
-      author={Guillem Simeon and Gianni de Fabritiis},
-      year={2023},
-      eprint={2306.06482},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+@inproceedings{simeon2023tensornet,
+title={TensorNet: Cartesian Tensor Representations for Efficient Learning of Molecular Potentials},
+author={Guillem Simeon and Gianni De Fabritiis},
+booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
+year={2023},
+url={https://openreview.net/forum?id=BEHlPdBZ2e}
 }
 ```
 
