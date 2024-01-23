@@ -74,6 +74,7 @@ def get_argparse():
     parser.add_argument('--force-files', default=None, type=str, help='Custom force files glob')
     parser.add_argument('--ext-esp-files', default=None, type=str, help='Custom external electrostatic potential files glob')
     parser.add_argument('--ext-esp-grad-files', default=None, type=str, help='Custom external electrostatic potential gradient files glob')
+    parser.add_argument('--dataset-preload-limit', default=1024, type=int, help='Custom and HDF5 datasets will preload to RAM datasets that are less than this size in MB')
     parser.add_argument('--y-weight', default=1.0, type=float, help='Weighting factor for y label in the loss function')
     parser.add_argument('--neg-dy-weight', default=1.0, type=float, help='Weighting factor for neg_dy label in the loss function')
     parser.add_argument('--esp-weight', default=1.0, type=float, help='Weighting factor for esp label in the loss function')
