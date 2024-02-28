@@ -443,6 +443,7 @@ class TorchMD_Net(nn.Module):
             assert dy is not None, "Autograd returned None for the force prediction."
             assert esp is not None, "Autograd returned None for the esp prediction."
             assert esp_grad is not None, "Autograd returned None for the esp_grad prediction."
+            esp_grad = esp_grad / ext_charge.unsqueeze(-1)
             return y, -dy, esp, esp_grad
         # Returning an empty tensor allows to decorate this method as always returning four tensors.
         # This is required to overcome a TorchScript limitation, xref https://github.com/openmm/openmm-torch/issues/135
