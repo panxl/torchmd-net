@@ -26,10 +26,20 @@ For example, to use the Atomref prior via YAML, your configuration might look li
 .. code:: yaml
 
 	  prior_model: Atomref
-	  prior_args: 
-	     max_z: 100  # Optional argument for Atomref
+
+It is possible to configure more than one prior in this way:
+	     
+.. code:: yaml
+
+    prior_model:
+        Atomref: {} # No additional arguments
+        Coulomb:
+            lower_switch_distance: 4
+            upper_switch_distance: 8
+            max_num_neighbors: 128
 
 
+	  
 Via the Python API
 ~~~~~~~~~~~~~~~~~~
 

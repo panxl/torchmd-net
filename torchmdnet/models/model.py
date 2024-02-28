@@ -51,9 +51,11 @@ def create_model(args, prior_model=None, mean=None, std=None):
         max_z=args["max_z"],
         check_errors=bool(args["check_errors"]),
         max_num_neighbors=args["max_num_neighbors"],
-        box_vecs=torch.tensor(args["box_vecs"], dtype=dtype)
-        if args["box_vecs"] is not None
-        else None,
+        box_vecs=(
+            torch.tensor(args["box_vecs"], dtype=dtype)
+            if args["box_vecs"] is not None
+            else None
+        ),
         dtype=dtype,
     )
 
@@ -167,42 +169,69 @@ def load_model(filepath, args=None, device="cpu", **kwargs):
     if args is None:
         args = ckpt["hyper_parameters"]
 
+    delta_learning = args["remove_ref_energy"] if "remove_ref_energy" in args else False
+
     for key, value in kwargs.items():
         if not key in args:
             warnings.warn(f"Unknown hyperparameter: {key}={value}")
         args[key] = value
 
     model = create_model(args)
+    if delta_learning and "remove_ref_energy" in kwargs:
+        if not kwargs["remove_ref_energy"]:
+            assert (
+                len(model.prior_model) > 0
+            ), "Atomref prior must be added during training (with enable=False) for total energy prediction."
+            assert isinstance(
+                model.prior_model[-1], priors.Atomref
+            ), "I expected the last prior to be Atomref."
+            # Set the Atomref prior to enabled
+            model.prior_model[-1].enable = True
 
     state_dict = {re.sub(r"^model\.", "", k): v for k, v in ckpt["state_dict"].items()}
-    # The following are for backward compatibility with models created when atomref was
-    # the only supported prior.
-    if "prior_model.initial_atomref" in state_dict:
-        warnings.warn(
-            "prior_model.initial_atomref is deprecated and will be removed in a future version. Use prior_model.0.initial_atomref instead.",
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        state_dict["prior_model.0.initial_atomref"] = state_dict[
-            "prior_model.initial_atomref"
-        ]
-        del state_dict["prior_model.initial_atomref"]
-    if "prior_model.atomref.weight" in state_dict:
-        warnings.warn(
-            "prior_model.atomref.weight is deprecated and will be removed in a future version. Use prior_model.0.atomref.weight instead.",
-            category=DeprecationWarning,
-            stacklevel=2,
-        )
-        state_dict["prior_model.0.atomref.weight"] = state_dict[
-            "prior_model.atomref.weight"
-        ]
-        del state_dict["prior_model.atomref.weight"]
     model.load_state_dict(state_dict)
     return model.to(device)
 
 
 def create_prior_models(args, dataset=None):
-    """Parse the prior_model configuration option and create the prior models."""
+    """Parse the prior_model configuration option and create the prior models.
+
+    The information can be passed in different ways via the args dictionary, which must contain at least the key "prior_model".
+
+    1. A single prior model name and its arguments as a dictionary:
+
+    ```python
+    args = {
+        "prior_model": "Atomref",
+        "prior_args": {"max_z": 100}
+    }
+    ```
+    2. A list of prior model names and their arguments as a list of dictionaries:
+
+    ```python
+
+    args = {
+        "prior_model": ["Atomref", "D2"],
+        "prior_args": [{"max_z": 100}, {"max_z": 100}]
+    }
+    ```
+
+    3. A list of prior model names and their arguments as a dictionary:
+
+    ```python
+    args = {
+        "prior_model": [{"Atomref": {"max_z": 100}}, {"D2": {"max_z": 100}}]
+    }
+    ```
+
+    Args:
+        args (dict): Arguments for the model.
+        dataset (torch_geometric.data.Dataset, optional): A dataset from which to extract the atomref values. Defaults to None.
+
+    Returns:
+        list: A list of prior models.
+
+    """
     prior_models = []
     if args["prior_model"]:
         prior_model = args["prior_model"]
@@ -221,7 +250,7 @@ def create_prior_models(args, dataset=None):
             else:
                 prior_names.append(prior)
                 prior_args.append({})
-        if "prior_args" in args:
+        if "prior_args" in args and args["prior_args"] is not None:
             prior_args = args["prior_args"]
             if not isinstance(prior_args, list):
                 prior_args = [prior_args]
@@ -325,7 +354,7 @@ class TorchMD_Net(nn.Module):
         q: Optional[Tensor] = None,
         s: Optional[Tensor] = None,
         extra_args: Optional[Dict[str, Tensor]] = None,
-    ) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor]]:
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """
         Compute the output of the model.
 
@@ -411,13 +440,10 @@ class TorchMD_Net(nn.Module):
                 create_graph=self.training,
                 retain_graph=self.training,
             )
-            if dy is None:
-                raise RuntimeError("Autograd returned None for the force prediction.")
-            if esp is None:
-                raise RuntimeError("Autograd returned None for the esp prediction.")
-            if esp_grad is None:
-                raise RuntimeError("Autograd returned None for the esp_grad prediction.")
-            esp_grad = esp_grad / ext_charge.unsqueeze(-1)
+            assert dy is not None, "Autograd returned None for the force prediction."
+            assert esp is not None, "Autograd returned None for the esp prediction."
+            assert esp_grad is not None, "Autograd returned None for the esp_grad prediction."
             return y, -dy, esp, esp_grad
-        # TODO: return only `out` once Union typing works with TorchScript (https://github.com/pytorch/pytorch/pull/53180)
-        return y, None, None, None
+        # Returning an empty tensor allows to decorate this method as always returning four tensors.
+        # This is required to overcome a TorchScript limitation, xref https://github.com/openmm/openmm-torch/issues/135
+        return y, torch.empty(0), torch.empty(0), torch.empty(0)
